@@ -1,6 +1,6 @@
 # NotiPush Queue Microservice
 
-[🇹🇭 อ่านภาษาไทย (Read in Thai)](https://www.google.com/search?q=%23-thai-version)
+[🇹🇭 อ่านภาษาไทย (Read in Thai)](#-thai-version)
 
 A lightweight, high-performance microservice written in Go (Golang). It acts as a local relay queue to forward push notifications to the NotiPush API (or any other API) with a strict **2 TPS (Transactions Per Second)** rate limit.
 
