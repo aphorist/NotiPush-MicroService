@@ -17,6 +17,13 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 
 * **Extremely Lightweight:** Compiled as a single static binary inside an Alpine Docker image (~15MB total size).
 
+## 🔒 Security Features
+
+* **IP-based Access Control:** Only allows push requests from specified IP addresses, hostnames, or subnets configured via `ALLOWED_IPS` environment variable
+* **CIDR Subnet Support:** Supports network ranges using CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`) for flexible network access control
+* **Proxy-aware IP Detection:** Supports `X-Forwarded-For` and `X-Real-IP` headers to correctly identify client IPs behind load balancers or proxies
+* **Flexible IP Configuration:** Supports individual IPs, hostnames (localhost), IPv6 addresses, and CIDR subnets with comma-separated values
+
 ## 🛠 Prerequisites
 
 * Docker and Docker Compose
@@ -27,6 +34,7 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 2. Review the `docker-compose.yml` file and adjust the Environment Variables if necessary:
 * `NOTIPUSH_URL`: The target API endpoint (Default: `https://notipush.app/api/send`)
 * `NOTIPUSH_PORT`: The port for the microservice to listen on (Default: `8880`)
+* `ALLOWED_IPS`: Comma-separated list of allowed IPs/hostnames/subnets that can send push requests (Default: `127.0.0.1,localhost,::1`). Supports CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`)
 * `NOTIPUSH_TOKEN`: (Optional) Your API token. If provided, the microservice will automatically inject this as an `Authorization` header.
 
 
@@ -87,6 +95,13 @@ curl -X POST http://localhost:8880/send-push \
 
 * **เบาและกินทรัพยากรน้อยมาก:** คอมไพล์เป็น Binary ไฟล์เดียว รันบน Alpine Linux Image ขนาดเพียงประมาณ 15MB
 
+## 🔒 ความปลอดภัย
+
+* **ควบคุมการเข้าถึงตาม IP:** อนุญาตให้ส่ง Push ได้เฉพาะจาก IP, Hostname หรือ Subnet ที่ระบุใน `ALLOWED_IPS` เท่านั้น
+* **รองรับ Subnet แบบ CIDR:** รองรับช่วงเครือข่ายโดยใช้ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`) สำหรับควบคุมการเข้าถึงแบบยืดหยุ่น
+* **ตรวจจับ IP ข้างหลัง Proxy:** รองรับ Header `X-Forwarded-For` และ `X-Real-IP` เพื่อระบุ Client IP ที่แท้จริงเมื่ออยู่หลัง Load Balancer หรือ Proxy
+* **การตั้งค่า IP ยืดหยุ่น:** รองรับทั้ง IPv4, IPv6, Hostname (localhost) และ CIDR Subnets โดยคั่นรายการด้วย comma
+
 ## 🛠 สิ่งที่ต้องติดตั้งไว้ก่อน
 
 * Docker และ Docker Compose
@@ -97,6 +112,7 @@ curl -X POST http://localhost:8880/send-push \
 2. ตรวจสอบไฟล์ `docker-compose.yml` เพื่อตั้งค่า Environment Variables ที่จำเป็น
 * `NOTIPUSH_URL`: URL ของ API ปลายทาง (ค่า Default: `https://notipush.app/api/send`)
 * `NOTIPUSH_PORT`: Port ที่ต้องการให้ Microservice รัน (ค่า Default: `8880`)
+* `ALLOWED_IPS`: รายการ IP/Hostname/Subnet ที่อนุญาตให้ส่ง Push คั่นด้วย comma (ค่า Default: `127.0.0.1,localhost,::1`) รองรับ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`)
 * `NOTIPUSH_TOKEN`: (Optional) Token สำหรับยืนยันตัวตน ถ้ามีจะถูกใส่ใน Header อัตโนมัติ
 3. สั่งรันระบบด้วยคำสั่ง:
 ```bash

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -23,6 +24,7 @@ var (
 	targetURL string
 	authToken string
 	listenPort string
+	allowedIPs []string
 )
 
 func main() {
@@ -39,6 +41,16 @@ func main() {
 	listenPort = os.Getenv("NOTIPUSH_PORT")
 	if listenPort == "" {
 		listenPort = "8880"
+	}
+
+	// ดึงค่า Allowed IPs จาก Environment Variable
+	allowedIPsStr := os.Getenv("ALLOWED_IPS")
+	if allowedIPsStr != "" {
+		allowedIPs = strings.Split(allowedIPsStr, ",")
+		// Trim whitespace from each IP
+		for i, ip := range allowedIPs {
+			allowedIPs[i] = strings.TrimSpace(ip)
+		}
 	}
 
 	initDB()
@@ -81,10 +93,92 @@ func initDB() {
 	db.Exec("ALTER TABLE push_queue ADD COLUMN retry_count INTEGER DEFAULT 0")
 }
 
+// ฟังก์ชันตรวจสอบ IP ที่อนุญาตให้ส่ง Push
+func isIPAllowed(clientIP string) bool {
+	// ถ้าไม่ได้กำหนด ALLOWED_IPS ไว้ ให้อนุญาตทุก IP
+	if len(allowedIPs) == 0 {
+		return true
+	}
+
+	// แปลง clientIP เป็น net.IP object
+	clientAddr := net.ParseIP(clientIP)
+	if clientAddr == nil {
+		log.Printf("[WARNING] Invalid client IP format: %s", clientIP)
+		return false
+	}
+
+	// ตรวจสอบว่า clientIP อยู่ในรายการที่อนุญาตหรือไม่
+	for _, allowedIP := range allowedIPs {
+		// ตรวจสอบกรณีเป็น CIDR subnet (มี /)
+		if strings.Contains(allowedIP, "/") {
+			_, ipNet, err := net.ParseCIDR(allowedIP)
+			if err != nil {
+				log.Printf("[WARNING] Invalid CIDR format in ALLOWED_IPS: %s", allowedIP)
+				continue
+			}
+			if ipNet.Contains(clientAddr) {
+				return true
+			}
+			continue
+		}
+
+		// ตรวจสอบกรณีเป็น IP/Hostname ธรรมดา
+		allowedAddr := net.ParseIP(allowedIP)
+		if allowedAddr != nil {
+			// กรณีเป็น IP address ที่ถูกต้อง
+			if clientAddr.Equal(allowedAddr) {
+				return true
+			}
+		} else {
+			// กรณีเป็น hostname (เช่น localhost)
+			if allowedIP == "localhost" && (clientIP == "127.0.0.1" || clientIP == "::1") {
+				return true
+			}
+			if allowedIP == "127.0.0.1" && (clientIP == "127.0.0.1" || clientIP == "localhost") {
+				return true
+			}
+			if allowedIP == "::1" && (clientIP == "::1" || clientIP == "localhost") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ฟังก์ชันดึง Client IP จาก Request
+func getClientIP(r *http.Request) string {
+	// ตรวจสอง X-Forwarded-For header (สำหรับกรณีอยู่หลัง proxy/load balancer)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// เอาเฉพาะ IP แรก (ถ้ามีหลาย IP)
+		ips := strings.Split(xff, ",")
+		return strings.TrimSpace(ips[0])
+	}
+	
+	// ตรวจสอง X-Real-IP header
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	
+	// ใช้ RemoteAddr ถ้าไม่มี header พิเศษ
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
 // API Handler สำหรับรับ Push จาก CI4
 func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// ตรวจสอบ IP ที่อนุญาตให้ส่ง Push
+	clientIP := getClientIP(r)
+	if !isIPAllowed(clientIP) {
+		log.Printf("[FORBIDDEN] IP %s is not allowed to send push requests", clientIP)
+		http.Error(w, "Forbidden: Your IP is not allowed", http.StatusForbidden)
 		return
 	}
 
