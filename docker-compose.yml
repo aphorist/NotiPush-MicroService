@@ -1,0 +1,18 @@
+services:
+  push-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: NotiPush-MicroService
+    restart: unless-stopped
+    ports:
+      - "8880:8880"
+    environment:
+      # URL ของ NotiPush API (เปลี่ยนเป็น Endpoint จริงที่ต้องการ)
+      - NOTIPUSH_URL=https://notipush.app/api/send-push
+      # ใส่ Token ถ้า API บังคับใช้ (ถ้าไม่ใช้ สามารถคอมเมนต์หรือลบทิ้งได้)
+      #- NOTIPUSH_TOKEN=Bearer YOUR_API_KEY
+    volumes:
+      # ทำ Volume Mount ผูกโฟลเดอร์ push_data ในเครื่องโฮสต์เข้ากับ /app/data ใน Container
+      # เพื่อป้องกันคิวสูญหายเมื่อ Container ถูกลบหรือรีสตาร์ท
+      - ./push_data:/app/data
