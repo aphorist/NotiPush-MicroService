@@ -42,12 +42,12 @@ docker-compose up -d --build
 
 The microservice exposes one internal endpoint. Send your raw JSON payload here, and it will be queued immediately.
 
-**Endpoint:** `POST http://localhost:8080/send-push`
+**Endpoint:** `POST http://localhost:8880/send-push`
 
 **Example cURL:**
 
 ```bash
-curl -X POST http://localhost:8080/send-push \
+curl -X POST http://localhost:8880/send-push \
 -H "Content-Type: application/json" \
 -d '{
     "token": "YOUR_NOTIPUSH_API_TOKEN",
@@ -107,12 +107,12 @@ docker-compose up -d --build
 
 Microservice ตัวนี้เปิดรับ Request เพียง 1 Endpoint คุณสามารถส่ง JSON รูปแบบใดก็ได้เข้ามา ระบบจะนำไปเข้าคิวและส่งต่อให้ตามรูปแบบนั้น 100%
 
-**Endpoint:** `POST http://localhost:8080/send-push`
+**Endpoint:** `POST http://localhost:8880/send-push`
 
 **ตัวอย่างการยิงด้วย cURL:**
 
 ```bash
-curl -X POST http://localhost:8080/send-push \
+curl -X POST http://localhost:8880/send-push \
 -H "Content-Type: application/json" \
 -d '{
     "token": "YOUR_NOTIPUSH_API_TOKEN",

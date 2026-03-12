@@ -28,7 +28,7 @@ func main() {
 	// ดึงค่า URL ปลายทางจาก Environment Variable (ถ้าไม่มีใช้ค่า Default)
 	targetURL = os.Getenv("NOTIPUSH_URL")
 	if targetURL == "" {
-		targetURL = "https://notipush.app/api/send"
+		targetURL = "https://notipush.app/api/send-push"
 	}
 
 	// ดึงค่า Token สำหรับ Header
@@ -42,8 +42,8 @@ func main() {
 
 	http.HandleFunc("/send-push", enqueuePushHandler)
 
-	fmt.Println("Push Microservice is running on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Println("Push Microservice is running on port 8880...")
+	log.Fatal(http.ListenAndServe(":8880", nil))
 }
 
 func initDB() {
