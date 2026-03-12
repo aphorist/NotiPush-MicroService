@@ -6,10 +6,12 @@ services:
     container_name: NotiPush-MicroService
     restart: unless-stopped
     ports:
-      - "8880:8880"
+      - "${NOTIPUSH_PORT:-8180}:${NOTIPUSH_PORT:-8180}"
     environment:
       # URL ของ NotiPush API (เปลี่ยนเป็น Endpoint จริงที่ต้องการ)
       - NOTIPUSH_URL=https://notipush.app/api/send-push
+      # Port ที่ต้องการให้ Service รัน (Default: 8180)
+      - NOTIPUSH_PORT=${NOTIPUSH_PORT:-8180}
       # ใส่ Token ถ้า API บังคับใช้ (ถ้าไม่ใช้ สามารถคอมเมนต์หรือลบทิ้งได้)
       #- NOTIPUSH_TOKEN=Bearer YOUR_API_KEY
     volumes:

@@ -22,6 +22,7 @@ var (
 	// ตัวแปรสำหรับเก็บตั้งค่าจาก Environment
 	targetURL string
 	authToken string
+	listenPort string
 )
 
 func main() {
@@ -34,6 +35,12 @@ func main() {
 	// ดึงค่า Token สำหรับ Header
 	authToken = os.Getenv("NOTIPUSH_TOKEN")
 
+	// ดึงค่า Port จาก Environment Variable (ถ้าไม่มีใช้ค่า Default 8880)
+	listenPort = os.Getenv("NOTIPUSH_PORT")
+	if listenPort == "" {
+		listenPort = "8880"
+	}
+
 	initDB()
 	defer db.Close()
 
@@ -42,8 +49,8 @@ func main() {
 
 	http.HandleFunc("/send-push", enqueuePushHandler)
 
-	fmt.Println("Push Microservice is running on port 8880...")
-	log.Fatal(http.ListenAndServe(":8880", nil))
+	fmt.Printf("Push Microservice is running on port %s...\n", listenPort)
+	log.Fatal(http.ListenAndServe(":"+listenPort, nil))
 }
 
 func initDB() {

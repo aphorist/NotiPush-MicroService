@@ -26,6 +26,7 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 1. Clone the repository.
 2. Review the `docker-compose.yml` file and adjust the Environment Variables if necessary:
 * `NOTIPUSH_URL`: The target API endpoint (Default: `https://notipush.app/api/send`)
+* `NOTIPUSH_PORT`: The port for the microservice to listen on (Default: `8880`)
 * `NOTIPUSH_TOKEN`: (Optional) Your API token. If provided, the microservice will automatically inject this as an `Authorization` header.
 
 
@@ -42,7 +43,7 @@ docker-compose up -d --build
 
 The microservice exposes one internal endpoint. Send your raw JSON payload here, and it will be queued immediately.
 
-**Endpoint:** `POST http://localhost:8880/send-push`
+**Endpoint:** `POST http://localhost:8880/send-push` (or your configured `NOTIPUSH_PORT`)
 
 **Example cURL:**
 
@@ -94,6 +95,9 @@ curl -X POST http://localhost:8880/send-push \
 
 1. Clone โปรเจกต์นี้
 2. ตรวจสอบไฟล์ `docker-compose.yml` เพื่อตั้งค่า Environment Variables ที่จำเป็น
+* `NOTIPUSH_URL`: URL ของ API ปลายทาง (ค่า Default: `https://notipush.app/api/send`)
+* `NOTIPUSH_PORT`: Port ที่ต้องการให้ Microservice รัน (ค่า Default: `8880`)
+* `NOTIPUSH_TOKEN`: (Optional) Token สำหรับยืนยันตัวตน ถ้ามีจะถูกใส่ใน Header อัตโนมัติ
 3. สั่งรันระบบด้วยคำสั่ง:
 ```bash
 docker-compose up -d --build
@@ -107,7 +111,7 @@ docker-compose up -d --build
 
 Microservice ตัวนี้เปิดรับ Request เพียง 1 Endpoint คุณสามารถส่ง JSON รูปแบบใดก็ได้เข้ามา ระบบจะนำไปเข้าคิวและส่งต่อให้ตามรูปแบบนั้น 100%
 
-**Endpoint:** `POST http://localhost:8880/send-push`
+**Endpoint:** `POST http://localhost:8880/send-push` (or your configured `NOTIPUSH_PORT`)
 
 **ตัวอย่างการยิงด้วย cURL:**
 
