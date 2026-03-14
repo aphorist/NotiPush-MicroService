@@ -25,6 +25,7 @@ var (
 	authToken string
 	listenPort string
 	allowedIPs []string
+	debugMode bool
 )
 
 func main() {
@@ -52,6 +53,8 @@ func main() {
 			allowedIPs[i] = strings.TrimSpace(ip)
 		}
 	}
+
+	debugMode = strings.EqualFold(os.Getenv("DEBUG"), "true")
 
 	initDB()
 	defer db.Close()
@@ -197,6 +200,9 @@ func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payloadStr := string(bodyBytes)
+	if debugMode {
+		log.Printf("[DEBUG] Received payload from %s: %s", clientIP, payloadStr)
+	}
 
 	// ล็อก Mutex ป้องกัน Request อื่นมาอ่านค่า MAX() ชนกัน
 	mu.Lock()
