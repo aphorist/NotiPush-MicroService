@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ var (
 	// ตัวแปรสำหรับเก็บตั้งค่าจาก Environment
 	targetURL string
 	authToken string
+	inboundBearerToken string
 	listenPort string
 	allowedIPs []string
 	debugMode bool
@@ -37,6 +39,9 @@ func main() {
 
 	// ดึงค่า Token สำหรับ Header
 	authToken = os.Getenv("NOTIPUSH_TOKEN")
+
+	// ดึงค่า Bearer Token สำหรับรับ Request เข้า Microservice
+	inboundBearerToken = strings.TrimSpace(os.Getenv("INBOUND_BEARER_TOKEN"))
 
 	// ดึงค่า Port จาก Environment Variable (ถ้าไม่มีใช้ค่า Default 8880)
 	listenPort = os.Getenv("NOTIPUSH_PORT")
@@ -170,6 +175,42 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
+func extractBearerToken(r *http.Request) (string, string) {
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if authHeader == "" {
+		return "", "missing_header"
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", "invalid_scheme"
+	}
+
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", "missing_token"
+	}
+
+	return token, "ok"
+}
+
+func isBearerAuthorized(r *http.Request) (bool, string) {
+	if inboundBearerToken == "" {
+		return false, "disabled"
+	}
+
+	receivedToken, reason := extractBearerToken(r)
+	if reason != "ok" {
+		return false, reason
+	}
+
+	if subtle.ConstantTimeCompare([]byte(receivedToken), []byte(inboundBearerToken)) == 1 {
+		return true, "authorized"
+	}
+
+	return false, "invalid_token"
+}
+
 // API Handler สำหรับรับ Push จาก CI4
 func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -179,9 +220,11 @@ func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 
 	// ตรวจสอบ IP ที่อนุญาตให้ส่ง Push
 	clientIP := getClientIP(r)
-	if !isIPAllowed(clientIP) {
-		log.Printf("[FORBIDDEN] IP %s is not allowed to send push requests", clientIP)
-		http.Error(w, "Forbidden: Your IP is not allowed", http.StatusForbidden)
+	ipAllowed := isIPAllowed(clientIP)
+	bearerAuthorized, bearerReason := isBearerAuthorized(r)
+	if !bearerAuthorized && !ipAllowed {
+		log.Printf("[UNAUTHORIZED] Rejected request from %s (bearer=%s ip_allowed=false)", clientIP, bearerReason)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -220,7 +263,7 @@ func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 2. ค้นหาแถวที่ส่งไปแล้ว (is_sent = 1) เพื่อนำกลับมาใช้ใหม่
 	var reusableID int
-	err = db.QueryRow("SELECT id FROM push_queue WHERE is_sent = 1 LIMIT 1").Scan(&reusableID)
+	err = db.QueryRow("SELECT id FROM push_queue WHERE is_sent = 1 ORDER BY id ASC LIMIT 1").Scan(&reusableID)
 
 	if err == sql.ErrNoRows {
 		// ถ้าไม่มี is_sent = 1 ให้ INSERT ใหม่ (รีเซ็ต retry_count เป็น 0)

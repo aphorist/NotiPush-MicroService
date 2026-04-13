@@ -12,10 +12,12 @@ services:
       - NOTIPUSH_URL=https://notipush.app/api/send-push
       # Port ที่ต้องการให้ Service รัน (Default: 8180)
       - NOTIPUSH_PORT=${NOTIPUSH_PORT:-8180}
-      # IPs ที่อนุญาตให้ส่ง Push (คั่นด้วย comma)
+      # Bearer token สำหรับ auth ฝั่ง inbound ที่ endpoint /send-push
+      - INBOUND_BEARER_TOKEN=${INBOUND_BEARER_TOKEN:-}
+      # IPs ที่อนุญาตให้ส่ง Push (คั่นด้วย comma) ใช้เป็น fallback ได้ถ้าไม่มี bearer token
       - ALLOWED_IPS=${ALLOWED_IPS:-127.0.0.1,localhost,::1}
       - DEBUG=${DEBUG:-false}
-      # ใส่ Token ถ้า API บังคับใช้ (ถ้าไม่ใช้ สามารถคอมเมนต์หรือลบทิ้งได้)
+      # ใส่ Token ถ้า API ปลายทางบังคับใช้ (outbound Authorization header)
       #- NOTIPUSH_TOKEN=Bearer YOUR_API_KEY
     volumes:
       # ทำ Volume Mount ผูกโฟลเดอร์ push_data ในเครื่องโฮสต์เข้ากับ /app/data ใน Container

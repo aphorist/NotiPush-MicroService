@@ -19,10 +19,11 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 
 ## 🔒 Security Features
 
-* **IP-based Access Control:** Only allows push requests from specified IP addresses, hostnames, or subnets configured via `ALLOWED_IPS` environment variable
+* **Bearer or IP Access Control:** Accepts inbound requests when the caller sends a valid bearer token in `Authorization: Bearer ...` or when the source IP matches `ALLOWED_IPS`
+* **Inbound Bearer Token:** Configure `INBOUND_BEARER_TOKEN` for callers that run behind dynamic IP addresses and cannot be safely allowlisted
 * **CIDR Subnet Support:** Supports network ranges using CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`) for flexible network access control
 * **Proxy-aware IP Detection:** Supports `X-Forwarded-For` and `X-Real-IP` headers to correctly identify client IPs behind load balancers or proxies
-* **Flexible IP Configuration:** Supports individual IPs, hostnames (localhost), IPv6 addresses, and CIDR subnets with comma-separated values
+* **Flexible IP Configuration:** Supports individual IPs, hostnames (localhost), IPv6 addresses, and CIDR subnets with comma-separated values as a backward-compatible fallback
 
 ## 🛠 Prerequisites
 
@@ -34,7 +35,8 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 2. Review the `docker-compose.yml` file and adjust the Environment Variables if necessary:
 * `NOTIPUSH_URL`: The target API endpoint (Default: `https://notipush.app/api/send`)
 * `NOTIPUSH_PORT`: The port for the microservice to listen on (Default: `8880`)
-* `ALLOWED_IPS`: Comma-separated list of allowed IPs/hostnames/subnets that can send push requests (Default: `127.0.0.1,localhost,::1`). Supports CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`)
+* `INBOUND_BEARER_TOKEN`: Optional bearer token for inbound requests to `POST /send-push`. Recommended when the caller uses a dynamic IP
+* `ALLOWED_IPS`: Comma-separated list of allowed IPs/hostnames/subnets that can send push requests (Default: `127.0.0.1,localhost,::1`). Supports CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`) and remains available as a fallback path
 * `NOTIPUSH_TOKEN`: (Optional) Your API token. If provided, the microservice will automatically inject this as an `Authorization` header.
 
 
@@ -53,11 +55,17 @@ The microservice exposes one internal endpoint. Send your raw JSON payload here,
 
 **Endpoint:** `POST http://localhost:8880/send-push` (or your configured `NOTIPUSH_PORT`)
 
+Inbound authentication accepts either of these:
+
+* `Authorization: Bearer <INBOUND_BEARER_TOKEN>`
+* A source IP/hostname/subnet that matches `ALLOWED_IPS`
+
 **Example cURL:**
 
 ```bash
 curl -X POST http://localhost:8880/send-push \
 -H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_INBOUND_BEARER_TOKEN" \
 -d '{
     "token": "YOUR_NOTIPUSH_API_TOKEN",
     "device_token": "your_device_token_here",
@@ -97,10 +105,11 @@ curl -X POST http://localhost:8880/send-push \
 
 ## 🔒 ความปลอดภัย
 
-* **ควบคุมการเข้าถึงตาม IP:** อนุญาตให้ส่ง Push ได้เฉพาะจาก IP, Hostname หรือ Subnet ที่ระบุใน `ALLOWED_IPS` เท่านั้น
+* **ควบคุมการเข้าถึงแบบ Bearer หรือ IP:** อนุญาตให้ส่ง Push ได้หากมี `Authorization: Bearer ...` ที่ตรงกับ `INBOUND_BEARER_TOKEN` หรือมี IP/Hostname/Subnet ตรงกับ `ALLOWED_IPS`
+* **รองรับ Inbound Bearer Token:** ใช้ `INBOUND_BEARER_TOKEN` สำหรับเครื่องต้นทางที่มี Dynamic IP และไม่สะดวก allowlist IP
 * **รองรับ Subnet แบบ CIDR:** รองรับช่วงเครือข่ายโดยใช้ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`) สำหรับควบคุมการเข้าถึงแบบยืดหยุ่น
 * **ตรวจจับ IP ข้างหลัง Proxy:** รองรับ Header `X-Forwarded-For` และ `X-Real-IP` เพื่อระบุ Client IP ที่แท้จริงเมื่ออยู่หลัง Load Balancer หรือ Proxy
-* **การตั้งค่า IP ยืดหยุ่น:** รองรับทั้ง IPv4, IPv6, Hostname (localhost) และ CIDR Subnets โดยคั่นรายการด้วย comma
+* **การตั้งค่า IP ยืดหยุ่น:** รองรับทั้ง IPv4, IPv6, Hostname (localhost) และ CIDR Subnets โดยคั่นรายการด้วย comma และยังใช้เป็น fallback ได้
 
 ## 🛠 สิ่งที่ต้องติดตั้งไว้ก่อน
 
@@ -112,7 +121,8 @@ curl -X POST http://localhost:8880/send-push \
 2. ตรวจสอบไฟล์ `docker-compose.yml` เพื่อตั้งค่า Environment Variables ที่จำเป็น
 * `NOTIPUSH_URL`: URL ของ API ปลายทาง (ค่า Default: `https://notipush.app/api/send`)
 * `NOTIPUSH_PORT`: Port ที่ต้องการให้ Microservice รัน (ค่า Default: `8880`)
-* `ALLOWED_IPS`: รายการ IP/Hostname/Subnet ที่อนุญาตให้ส่ง Push คั่นด้วย comma (ค่า Default: `127.0.0.1,localhost,::1`) รองรับ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`)
+* `INBOUND_BEARER_TOKEN`: Bearer token สำหรับ request ที่ยิงเข้า `POST /send-push` แนะนำให้ตั้งเมื่อ client ใช้ Dynamic IP
+* `ALLOWED_IPS`: รายการ IP/Hostname/Subnet ที่อนุญาตให้ส่ง Push คั่นด้วย comma (ค่า Default: `127.0.0.1,localhost,::1`) รองรับ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`) และยังใช้เป็น fallback ได้
 * `NOTIPUSH_TOKEN`: (Optional) Token สำหรับยืนยันตัวตน ถ้ามีจะถูกใส่ใน Header อัตโนมัติ
 3. สั่งรันระบบด้วยคำสั่ง:
 ```bash
@@ -129,11 +139,17 @@ Microservice ตัวนี้เปิดรับ Request เพียง 1 E
 
 **Endpoint:** `POST http://localhost:8880/send-push` (or your configured `NOTIPUSH_PORT`)
 
+การยืนยันตัวตนฝั่ง inbound ใช้ได้ 2 แบบ:
+
+* ใส่ `Authorization: Bearer <INBOUND_BEARER_TOKEN>`
+* ยิงมาจาก IP/Hostname/Subnet ที่อยู่ใน `ALLOWED_IPS`
+
 **ตัวอย่างการยิงด้วย cURL:**
 
 ```bash
 curl -X POST http://localhost:8880/send-push \
 -H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_INBOUND_BEARER_TOKEN" \
 -d '{
     "token": "YOUR_NOTIPUSH_API_TOKEN",
     "device_token": "your_device_token_here",
