@@ -22,12 +22,12 @@ var (
 	mu sync.Mutex // ตัวล็อกป้องกัน Race condition ตอนหา MAX(queue_index)
 
 	// ตัวแปรสำหรับเก็บตั้งค่าจาก Environment
-	targetURL string
-	authToken string
+	targetURL          string
+	authToken          string
 	inboundBearerToken string
-	listenPort string
-	allowedIPs []string
-	debugMode bool
+	listenPort         string
+	allowedIPs         []string
+	debugMode          bool
 )
 
 func main() {
@@ -161,12 +161,12 @@ func getClientIP(r *http.Request) string {
 		ips := strings.Split(xff, ",")
 		return strings.TrimSpace(ips[0])
 	}
-	
+
 	// ตรวจสอง X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	
+
 	// ใช้ RemoteAddr ถ้าไม่มี header พิเศษ
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -181,12 +181,20 @@ func extractBearerToken(r *http.Request) (string, string) {
 		return "", "missing_header"
 	}
 
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+	if len(authHeader) < len("Bearer") || !strings.EqualFold(authHeader[:len("Bearer")], "Bearer") {
 		return "", "invalid_scheme"
 	}
 
-	token := strings.TrimSpace(parts[1])
+	if len(authHeader) == len("Bearer") {
+		return "", "missing_token"
+	}
+
+	separator := authHeader[len("Bearer")]
+	if separator != ' ' && separator != '\t' {
+		return "", "invalid_scheme"
+	}
+
+	token := strings.TrimSpace(authHeader[len("Bearer"):])
 	if token == "" {
 		return "", "missing_token"
 	}
@@ -211,6 +219,26 @@ func isBearerAuthorized(r *http.Request) (bool, string) {
 	return false, "invalid_token"
 }
 
+func isRequestAuthorized(r *http.Request, clientIP string) (bool, string) {
+	bearerAuthorized, bearerReason := isBearerAuthorized(r)
+	ipAuthConfigured := len(allowedIPs) > 0
+	ipAllowed := ipAuthConfigured && isIPAllowed(clientIP)
+
+	if bearerAuthorized || ipAllowed {
+		return true, bearerReason
+	}
+
+	if inboundBearerToken == "" && !ipAuthConfigured {
+		return true, "open_access"
+	}
+
+	if bearerReason == "disabled" && ipAuthConfigured {
+		return false, "ip_denied"
+	}
+
+	return false, bearerReason
+}
+
 // API Handler สำหรับรับ Push จาก CI4
 func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -220,10 +248,10 @@ func enqueuePushHandler(w http.ResponseWriter, r *http.Request) {
 
 	// ตรวจสอบ IP ที่อนุญาตให้ส่ง Push
 	clientIP := getClientIP(r)
-	ipAllowed := isIPAllowed(clientIP)
-	bearerAuthorized, bearerReason := isBearerAuthorized(r)
-	if !bearerAuthorized && !ipAllowed {
-		log.Printf("[UNAUTHORIZED] Rejected request from %s (bearer=%s ip_allowed=false)", clientIP, bearerReason)
+	authorized, authReason := isRequestAuthorized(r, clientIP)
+	if !authorized {
+		log.Printf("[UNAUTHORIZED] Rejected request from %s (reason=%s)", clientIP, authReason)
+		w.Header().Set("WWW-Authenticate", `Bearer realm="send-push"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -313,12 +341,12 @@ func queueWorker() {
 			// ส่งสำเร็จ อัปเดตเป็น is_sent = 1
 			db.Exec("UPDATE push_queue SET is_sent = 1 WHERE id = ?", id)
 			log.Printf("[SUCCESS] Sent push ID: %d", id)
-			
+
 		} else if status == 2 {
 			// ส่งไม่ผ่านเพราะ Error ฝั่ง Client (เช่น 422 ข้อความซ้ำ) ให้ Drop ทิ้งทันที
 			db.Exec("UPDATE push_queue SET is_sent = 1 WHERE id = ?", id)
 			log.Printf("[DROPPED] Push ID: %d dropped due to client/validation error.", id)
-			
+
 		} else {
 			// กรณี status == 3 (Server Error / Timeout) ให้นำไป Retry
 			retryCount++
@@ -350,14 +378,14 @@ func sendPushToRealServer(payloadStr string) int {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	if authToken != "" {
 		req.Header.Set("Authorization", authToken)
 	}
 
 	// ตั้ง Timeout 10 วิ ป้องกันคิวค้าง
 	client := &http.Client{Timeout: 10 * time.Second}
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("[ERROR] Network error: %v", err)

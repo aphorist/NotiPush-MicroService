@@ -8,10 +8,10 @@ import (
 
 func TestExtractBearerToken(t *testing.T) {
 	tests := []struct {
-		name         string
-		header       string
-		wantToken    string
-		wantReason   string
+		name       string
+		header     string
+		wantToken  string
+		wantReason string
 	}{
 		{name: "missing header", header: "", wantReason: "missing_header"},
 		{name: "invalid scheme", header: "Token abc123", wantReason: "invalid_scheme"},
@@ -45,11 +45,11 @@ func TestIsBearerAuthorized(t *testing.T) {
 	})
 
 	tests := []struct {
-		name          string
-		configured    string
-		header        string
+		name           string
+		configured     string
+		header         string
 		wantAuthorized bool
-		wantReason    string
+		wantReason     string
 	}{
 		{name: "disabled", configured: "", header: "", wantAuthorized: false, wantReason: "disabled"},
 		{name: "missing header", configured: "secret", header: "", wantAuthorized: false, wantReason: "missing_header"},
@@ -90,9 +90,8 @@ func TestRequestAuthorizationMatrix(t *testing.T) {
 		authorization   string
 		allowedList     []string
 		remoteAddr      string
-		wantAllowed     bool
-		wantBearer      string
-		wantIPAllowed   bool
+		wantAuthorized  bool
+		wantReason      string
 	}{
 		{
 			name:            "valid bearer with disallowed ip",
@@ -100,18 +99,16 @@ func TestRequestAuthorizationMatrix(t *testing.T) {
 			authorization:   "Bearer secret",
 			allowedList:     []string{"10.0.0.1"},
 			remoteAddr:      "203.0.113.10:1234",
-			wantAllowed:     true,
-			wantBearer:      "authorized",
-			wantIPAllowed:   false,
+			wantAuthorized:  true,
+			wantReason:      "authorized",
 		},
 		{
 			name:            "allowed ip without bearer",
 			configuredToken: "secret",
 			allowedList:     []string{"203.0.113.10"},
 			remoteAddr:      "203.0.113.10:1234",
-			wantAllowed:     true,
-			wantBearer:      "missing_header",
-			wantIPAllowed:   true,
+			wantAuthorized:  true,
+			wantReason:      "missing_header",
 		},
 		{
 			name:            "invalid bearer and disallowed ip",
@@ -119,9 +116,8 @@ func TestRequestAuthorizationMatrix(t *testing.T) {
 			authorization:   "Bearer nope",
 			allowedList:     []string{"10.0.0.1"},
 			remoteAddr:      "203.0.113.10:1234",
-			wantAllowed:     false,
-			wantBearer:      "invalid_token",
-			wantIPAllowed:   false,
+			wantAuthorized:  false,
+			wantReason:      "invalid_token",
 		},
 		{
 			name:            "malformed authorization header",
@@ -129,18 +125,41 @@ func TestRequestAuthorizationMatrix(t *testing.T) {
 			authorization:   "Basic abc",
 			allowedList:     []string{"10.0.0.1"},
 			remoteAddr:      "203.0.113.10:1234",
-			wantAllowed:     false,
-			wantBearer:      "invalid_scheme",
-			wantIPAllowed:   false,
+			wantAuthorized:  false,
+			wantReason:      "invalid_scheme",
 		},
 		{
 			name:            "bearer disabled falls back to ip",
 			configuredToken: "",
 			allowedList:     []string{"203.0.113.10"},
 			remoteAddr:      "203.0.113.10:1234",
-			wantAllowed:     true,
-			wantBearer:      "disabled",
-			wantIPAllowed:   true,
+			wantAuthorized:  true,
+			wantReason:      "disabled",
+		},
+		{
+			name:            "bearer enabled without allowlist still requires token",
+			configuredToken: "secret",
+			authorization:   "Bearer nope",
+			allowedList:     nil,
+			remoteAddr:      "203.0.113.10:1234",
+			wantAuthorized:  false,
+			wantReason:      "invalid_token",
+		},
+		{
+			name:            "no auth configured keeps open access",
+			configuredToken: "",
+			allowedList:     nil,
+			remoteAddr:      "203.0.113.10:1234",
+			wantAuthorized:  true,
+			wantReason:      "open_access",
+		},
+		{
+			name:            "ip denied when bearer disabled",
+			configuredToken: "",
+			allowedList:     []string{"10.0.0.1"},
+			remoteAddr:      "203.0.113.10:1234",
+			wantAuthorized:  false,
+			wantReason:      "ip_denied",
 		},
 	}
 
@@ -156,18 +175,13 @@ func TestRequestAuthorizationMatrix(t *testing.T) {
 			}
 
 			clientIP := getClientIP(req)
-			ipAllowed := isIPAllowed(clientIP)
-			bearerAuthorized, bearerReason := isBearerAuthorized(req)
-			gotAllowed := bearerAuthorized || ipAllowed
+			gotAuthorized, gotReason := isRequestAuthorized(req, clientIP)
 
-			if bearerReason != tt.wantBearer {
-				t.Fatalf("bearer reason = %q, want %q", bearerReason, tt.wantBearer)
+			if gotAuthorized != tt.wantAuthorized {
+				t.Fatalf("authorized = %v, want %v", gotAuthorized, tt.wantAuthorized)
 			}
-			if ipAllowed != tt.wantIPAllowed {
-				t.Fatalf("ipAllowed = %v, want %v", ipAllowed, tt.wantIPAllowed)
-			}
-			if gotAllowed != tt.wantAllowed {
-				t.Fatalf("allowed = %v, want %v", gotAllowed, tt.wantAllowed)
+			if gotReason != tt.wantReason {
+				t.Fatalf("reason = %q, want %q", gotReason, tt.wantReason)
 			}
 		})
 	}
