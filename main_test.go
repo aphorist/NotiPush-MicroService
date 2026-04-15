@@ -186,3 +186,28 @@ func TestRequestAuthorizationMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestEnqueuePushHandlerRejectsUnauthorizedRequest(t *testing.T) {
+	originalToken := inboundBearerToken
+	originalAllowedIPs := allowedIPs
+	t.Cleanup(func() {
+		inboundBearerToken = originalToken
+		allowedIPs = originalAllowedIPs
+	})
+
+	inboundBearerToken = "secret"
+	allowedIPs = []string{"10.0.0.1"}
+
+	req := httptest.NewRequest(http.MethodPost, "/send-push", nil)
+	req.RemoteAddr = "203.0.113.10:1234"
+	recorder := httptest.NewRecorder()
+
+	enqueuePushHandler(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+	if got := recorder.Header().Get("WWW-Authenticate"); got != `Bearer realm="send-push"` {
+		t.Fatalf("WWW-Authenticate = %q, want %q", got, `Bearer realm="send-push"`)
+	}
+}

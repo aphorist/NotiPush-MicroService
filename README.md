@@ -21,6 +21,7 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 
 * **Bearer or IP Access Control:** Accepts inbound requests when the caller sends a valid bearer token in `Authorization: Bearer ...` or when the source IP matches `ALLOWED_IPS`
 * **Inbound Bearer Token:** Configure `INBOUND_BEARER_TOKEN` for callers that run behind dynamic IP addresses and cannot be safely allowlisted
+* **Separate Inbound/Outbound Tokens:** `INBOUND_BEARER_TOKEN` protects `POST /send-push`, while `NOTIPUSH_TOKEN` is forwarded to the downstream NotiPush API as an outbound `Authorization` header
 * **CIDR Subnet Support:** Supports network ranges using CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`) for flexible network access control
 * **Proxy-aware IP Detection:** Supports `X-Forwarded-For` and `X-Real-IP` headers to correctly identify client IPs behind load balancers or proxies
 * **Flexible IP Configuration:** Supports individual IPs, hostnames (localhost), IPv6 addresses, and CIDR subnets with comma-separated values as a backward-compatible fallback
@@ -32,38 +33,58 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 ## 🚀 Getting Started
 
 1. Clone the repository.
-2. Review the `docker-compose.yml` file and adjust the Environment Variables if necessary:
-* `NOTIPUSH_URL`: The target API endpoint (Default: `https://notipush.app/api/send`)
-* `NOTIPUSH_PORT`: The port for the microservice to listen on (Default: `8880`)
-* `INBOUND_BEARER_TOKEN`: Optional bearer token for inbound requests to `POST /send-push`. Recommended when the caller uses a dynamic IP
-* `ALLOWED_IPS`: Comma-separated list of allowed IPs/hostnames/subnets that can send push requests (Default: `127.0.0.1,localhost,::1`). Supports CIDR notation (e.g., `192.168.1.0/24`, `10.99.0.0/16`) and remains available as a fallback path
-* `NOTIPUSH_TOKEN`: (Optional) Your API token. If provided, the microservice will automatically inject this as an `Authorization` header.
+2. Update your `.env` or `docker-compose.yml` values before starting the container:
+* `NOTIPUSH_URL`: Downstream API endpoint (Current default: `https://notipush.app/api/send-push`)
+* `NOTIPUSH_PORT`: Port exposed by the microservice. The example `.env` in this repository uses `8280`
+* `INBOUND_BEARER_TOKEN`: Bearer token for inbound requests to `POST /send-push`. Use a long random secret when the caller has a dynamic IP
+* `ALLOWED_IPS`: Comma-separated allowlist for fallback access when the caller does not send a bearer token. Supports single IPs, hostnames, IPv6, and CIDR blocks
+* `NOTIPUSH_TOKEN`: Optional outbound `Authorization` header sent from this microservice to the downstream NotiPush API
+* `DEBUG`: Set to `true` to log incoming payloads for troubleshooting
+
+3. Recommended auth setup:
+* Keep `INBOUND_BEARER_TOKEN` set for callers behind dynamic IPs
+* Keep `ALLOWED_IPS` for trusted fixed-IP callers or as a migration fallback
+* Avoid committing real secrets from `.env` into version control
 
 
-3. Start the service:
+4. Start the service:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 
 ```
 
 
 *(Note: The SQLite database file will be safely persisted in the `./push_data` folder on your host machine).*
 
+5. Verify locally:
+```bash
+curl -X POST http://localhost:8280/send-push \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer YOUR_INBOUND_BEARER_TOKEN" \
+    -d '{"title":"hello","body":"test"}'
+```
+
 ## 📡 API Usage
 
 The microservice exposes one internal endpoint. Send your raw JSON payload here, and it will be queued immediately.
 
-**Endpoint:** `POST http://localhost:8880/send-push` (or your configured `NOTIPUSH_PORT`)
+**Endpoint:** `POST http://localhost:8280/send-push` when using the example `.env` in this repository, or `POST http://localhost:<NOTIPUSH_PORT>/send-push` for your own configuration.
 
 Inbound authentication accepts either of these:
 
 * `Authorization: Bearer <INBOUND_BEARER_TOKEN>`
 * A source IP/hostname/subnet that matches `ALLOWED_IPS`
 
+Authorization behavior is:
+
+* Valid bearer token: request is accepted even if the caller IP changes
+* No bearer token but IP is allowlisted: request is accepted
+* Invalid bearer token and IP not allowlisted: request is rejected with `401 Unauthorized`
+
 **Example cURL:**
 
 ```bash
-curl -X POST http://localhost:8880/send-push \
+curl -X POST http://localhost:8280/send-push \
 -H "Content-Type: application/json" \
 -H "Authorization: Bearer YOUR_INBOUND_BEARER_TOKEN" \
 -d '{
@@ -81,6 +102,16 @@ curl -X POST http://localhost:8880/send-push \
 {"status":"queued"}
 
 ```
+
+If authorization fails, the service responds with `401 Unauthorized` and returns a `WWW-Authenticate: Bearer realm="send-push"` header.
+
+## CI
+
+GitHub Actions is configured in `.github/workflows/ci.yml` to run on every push and pull request:
+
+* `gofmt -l .` to catch formatting drift
+* `go test ./...`
+* `go build ./...`
 
 ---
 
@@ -107,6 +138,7 @@ curl -X POST http://localhost:8880/send-push \
 
 * **ควบคุมการเข้าถึงแบบ Bearer หรือ IP:** อนุญาตให้ส่ง Push ได้หากมี `Authorization: Bearer ...` ที่ตรงกับ `INBOUND_BEARER_TOKEN` หรือมี IP/Hostname/Subnet ตรงกับ `ALLOWED_IPS`
 * **รองรับ Inbound Bearer Token:** ใช้ `INBOUND_BEARER_TOKEN` สำหรับเครื่องต้นทางที่มี Dynamic IP และไม่สะดวก allowlist IP
+* **แยก Token ขาเข้าและขาออกชัดเจน:** `INBOUND_BEARER_TOKEN` ใช้ป้องกัน `POST /send-push` ส่วน `NOTIPUSH_TOKEN` ใช้เป็น `Authorization` header ตอน service นี้ยิงต่อไปยัง NotiPush ปลายทาง
 * **รองรับ Subnet แบบ CIDR:** รองรับช่วงเครือข่ายโดยใช้ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`) สำหรับควบคุมการเข้าถึงแบบยืดหยุ่น
 * **ตรวจจับ IP ข้างหลัง Proxy:** รองรับ Header `X-Forwarded-For` และ `X-Real-IP` เพื่อระบุ Client IP ที่แท้จริงเมื่ออยู่หลัง Load Balancer หรือ Proxy
 * **การตั้งค่า IP ยืดหยุ่น:** รองรับทั้ง IPv4, IPv6, Hostname (localhost) และ CIDR Subnets โดยคั่นรายการด้วย comma และยังใช้เป็น fallback ได้
@@ -118,36 +150,57 @@ curl -X POST http://localhost:8880/send-push \
 ## 🚀 วิธีการรันระบบ
 
 1. Clone โปรเจกต์นี้
-2. ตรวจสอบไฟล์ `docker-compose.yml` เพื่อตั้งค่า Environment Variables ที่จำเป็น
-* `NOTIPUSH_URL`: URL ของ API ปลายทาง (ค่า Default: `https://notipush.app/api/send`)
-* `NOTIPUSH_PORT`: Port ที่ต้องการให้ Microservice รัน (ค่า Default: `8880`)
-* `INBOUND_BEARER_TOKEN`: Bearer token สำหรับ request ที่ยิงเข้า `POST /send-push` แนะนำให้ตั้งเมื่อ client ใช้ Dynamic IP
-* `ALLOWED_IPS`: รายการ IP/Hostname/Subnet ที่อนุญาตให้ส่ง Push คั่นด้วย comma (ค่า Default: `127.0.0.1,localhost,::1`) รองรับ CIDR notation (เช่น `192.168.1.0/24`, `10.99.0.0/16`) และยังใช้เป็น fallback ได้
-* `NOTIPUSH_TOKEN`: (Optional) Token สำหรับยืนยันตัวตน ถ้ามีจะถูกใส่ใน Header อัตโนมัติ
-3. สั่งรันระบบด้วยคำสั่ง:
+2. แก้ค่าที่ `.env` หรือ `docker-compose.yml` ให้ตรงกับระบบจริงก่อนรัน
+* `NOTIPUSH_URL`: URL ของ API ปลายทาง (ค่าปัจจุบัน: `https://notipush.app/api/send-push`)
+* `NOTIPUSH_PORT`: Port ที่ต้องการให้ Microservice รัน โดยตัวอย่าง `.env` ใน repo นี้ใช้ `8280`
+* `INBOUND_BEARER_TOKEN`: Bearer token สำหรับ request ที่ยิงเข้า `POST /send-push` แนะนำให้ตั้งเป็นค่ายาวและสุ่มเมื่อ client ใช้ Dynamic IP
+* `ALLOWED_IPS`: รายการ IP/Hostname/Subnet ที่อนุญาตให้ส่ง Push คั่นด้วย comma รองรับ CIDR notation และยังใช้เป็น fallback ได้
+* `NOTIPUSH_TOKEN`: (Optional) Token สำหรับขาออก ถ้า API ปลายทางบังคับให้ใส่ `Authorization` header
+* `DEBUG`: ตั้งเป็น `true` เมื่อต้องการ log payload สำหรับ debug
+
+3. แนวทางการตั้งค่า auth ที่แนะนำ:
+* ตั้ง `INBOUND_BEARER_TOKEN` ไว้สำหรับ client ที่ IP เปลี่ยนบ่อย
+* เก็บ `ALLOWED_IPS` ไว้สำหรับเครื่องที่มี IP คงที่ หรือใช้เป็น fallback ช่วง migration
+* หลีกเลี่ยงการ commit secret จริงจาก `.env` เข้า git
+
+4. สั่งรันระบบด้วยคำสั่ง:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 
 ```
 
 
 *(หมายเหตุ: ไฟล์ฐานข้อมูล SQLite จะถูกบันทึกไว้อย่างปลอดภัยที่โฟลเดอร์ `./push_data` ในเครื่องโฮสต์)*
 
+5. ทดสอบแบบเร็วในเครื่อง:
+```bash
+curl -X POST http://localhost:8280/send-push \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer YOUR_INBOUND_BEARER_TOKEN" \
+    -d '{"title":"hello","body":"test"}'
+```
+
 ## 📡 วิธีการใช้งาน API
 
 Microservice ตัวนี้เปิดรับ Request เพียง 1 Endpoint คุณสามารถส่ง JSON รูปแบบใดก็ได้เข้ามา ระบบจะนำไปเข้าคิวและส่งต่อให้ตามรูปแบบนั้น 100%
 
-**Endpoint:** `POST http://localhost:8880/send-push` (or your configured `NOTIPUSH_PORT`)
+**Endpoint:** `POST http://localhost:8280/send-push` หากใช้ `.env` ตัวอย่างใน repo นี้ หรือ `POST http://localhost:<NOTIPUSH_PORT>/send-push` ตามค่าที่คุณตั้งเอง
 
 การยืนยันตัวตนฝั่ง inbound ใช้ได้ 2 แบบ:
 
 * ใส่ `Authorization: Bearer <INBOUND_BEARER_TOKEN>`
 * ยิงมาจาก IP/Hostname/Subnet ที่อยู่ใน `ALLOWED_IPS`
 
+พฤติกรรมการอนุญาตมีดังนี้:
+
+* Bearer token ถูกต้อง: อนุญาต แม้ IP ต้นทางจะเปลี่ยน
+* ไม่มี bearer token แต่ IP อยู่ใน allowlist: อนุญาต
+* Bearer token ไม่ถูกต้องและ IP ไม่อยู่ใน allowlist: ปฏิเสธด้วย `401 Unauthorized`
+
 **ตัวอย่างการยิงด้วย cURL:**
 
 ```bash
-curl -X POST http://localhost:8880/send-push \
+curl -X POST http://localhost:8280/send-push \
 -H "Content-Type: application/json" \
 -H "Authorization: Bearer YOUR_INBOUND_BEARER_TOKEN" \
 -d '{
@@ -165,3 +218,13 @@ curl -X POST http://localhost:8880/send-push \
 {"status":"queued"}
 
 ```
+
+ถ้า auth ไม่ผ่าน ระบบจะตอบ `401 Unauthorized` และส่ง header `WWW-Authenticate: Bearer realm="send-push"` กลับไป
+
+## CI
+
+มี GitHub Actions ที่ `.github/workflows/ci.yml` ให้รันอัตโนมัติทุกครั้งที่ push หรือเปิด pull request:
+
+* `gofmt -l .` สำหรับจับไฟล์ที่ format ไม่ตรง
+* `go test ./...`
+* `go build ./...`
