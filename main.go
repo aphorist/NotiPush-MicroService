@@ -393,18 +393,36 @@ func sendPushToRealServer(payloadStr string) int {
 	}
 	defer resp.Body.Close()
 
+	// อ่าน Response Body เสมอ เพื่อใช้แสดงเวลาทำงานในโหมด debug
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[ERROR] Failed to read NotiPush response body: %v", err)
+	}
+	bodyStr := string(bodyBytes)
+
 	// HTTP Status 200-299 ถือว่าส่งสำเร็จ
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if debugMode {
+			log.Printf("[DEBUG] NotiPush response (Status: %d): %s", resp.StatusCode, strings.TrimSpace(bodyStr))
+		}
 		return 1 // Success
 	}
 
 	// HTTP Status 400-499 เป็น Error ฝั่ง Client (เช่น 422 ข้อความซ้ำ, 400 ข้อมูลผิด) ไม่ควร Retry
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-		log.Printf("[WARNING] NotiPush rejected payload (Status: %d).", resp.StatusCode)
+		if debugMode {
+			log.Printf("[WARNING] NotiPush rejected payload (Status: %d). Response: %s", resp.StatusCode, strings.TrimSpace(bodyStr))
+		} else {
+			log.Printf("[WARNING] NotiPush rejected payload (Status: %d).", resp.StatusCode)
+		}
 		return 2 // Drop ทิ้ง
 	}
 
 	// HTTP Status 500 ขึ้นไป เป็น Server Error (ปลายทางพังชั่วคราว) สมควร Retry
-	log.Printf("[WARNING] NotiPush server error (Status: %d).", resp.StatusCode)
+	if debugMode {
+		log.Printf("[WARNING] NotiPush server error (Status: %d). Response: %s", resp.StatusCode, strings.TrimSpace(bodyStr))
+	} else {
+		log.Printf("[WARNING] NotiPush server error (Status: %d).", resp.StatusCode)
+	}
 	return 3 // Retry
 }
