@@ -3,8 +3,83 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
+
+func TestLoadDotEnvLoadsTPS(t *testing.T) {
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	originalTPS, hadTPS := os.LookupEnv("TPS")
+	t.Cleanup(func() {
+		if err := os.Chdir(originalWD); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+		if hadTPS {
+			if err := os.Setenv("TPS", originalTPS); err != nil {
+				t.Errorf("restore TPS: %v", err)
+			}
+			return
+		}
+		if err := os.Unsetenv("TPS"); err != nil {
+			t.Errorf("unset TPS: %v", err)
+		}
+	})
+
+	tempDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, ".env"), []byte("TPS=7\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	if err := os.Unsetenv("TPS"); err != nil {
+		t.Fatalf("unset TPS: %v", err)
+	}
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	loadDotEnv()
+	gotTPS, gotDelay := loadTPSConfig()
+
+	if gotTPS != 7 {
+		t.Fatalf("TPS = %d, want 7", gotTPS)
+	}
+	if gotDelay != time.Second/7 {
+		t.Fatalf("delay = %s, want %s", gotDelay, time.Second/7)
+	}
+}
+
+func TestLoadTPSConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     string
+		wantTPS   int
+		wantDelay time.Duration
+	}{
+		{name: "missing uses default", value: "", wantTPS: defaultTPS, wantDelay: 500 * time.Millisecond},
+		{name: "valid value", value: "10", wantTPS: 10, wantDelay: 100 * time.Millisecond},
+		{name: "whitespace trimmed", value: " 5 ", wantTPS: 5, wantDelay: 200 * time.Millisecond},
+		{name: "invalid falls back", value: "abc", wantTPS: defaultTPS, wantDelay: 500 * time.Millisecond},
+		{name: "zero falls back", value: "0", wantTPS: defaultTPS, wantDelay: 500 * time.Millisecond},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TPS", tt.value)
+
+			gotTPS, gotDelay := loadTPSConfig()
+			if gotTPS != tt.wantTPS {
+				t.Fatalf("TPS = %d, want %d", gotTPS, tt.wantTPS)
+			}
+			if gotDelay != tt.wantDelay {
+				t.Fatalf("delay = %s, want %s", gotDelay, tt.wantDelay)
+			}
+		})
+	}
+}
 
 func TestExtractBearerToken(t *testing.T) {
 	tests := []struct {

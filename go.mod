@@ -2,7 +2,10 @@ module push-service
 
 go 1.21
 
-require modernc.org/sqlite v1.28.0
+require (
+	github.com/joho/godotenv v1.5.1
+	modernc.org/sqlite v1.28.0
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

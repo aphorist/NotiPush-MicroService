@@ -20,6 +20,8 @@ services:
       # ใส่ Token ถ้า API ปลายทางบังคับใช้ (outbound Authorization header)
       #- NOTIPUSH_TOKEN=Bearer YOUR_API_KEY
     volumes:
+      # Mount .env so the service can read TPS and other runtime settings directly.
+      - ./.env:/app/.env:ro
       # ทำ Volume Mount ผูกโฟลเดอร์ push_data ในเครื่องโฮสต์เข้ากับ /app/data ใน Container
       # เพื่อป้องกันคิวสูญหายเมื่อ Container ถูกลบหรือรีสตาร์ท
       - ./push_data:/app/data

@@ -2,11 +2,11 @@
 
 [🇹🇭 อ่านภาษาไทย (Read in Thai)](#-thai-version)
 
-A lightweight, high-performance microservice written in Go (Golang). It acts as a local relay queue to forward push notifications to the NotiPush API (or any other API) with a strict **2 TPS (Transactions Per Second)** rate limit.
+A lightweight, high-performance microservice written in Go (Golang). It acts as a local relay queue to forward push notifications to the NotiPush API (or any other API) with a configurable **TPS (Transactions Per Second)** rate limit via `TPS` in `.env` or the process environment (default: `2`).
 
 ## 📌 Core Features (Facts & Architecture)
 
-* **Strict 2 TPS Rate Limiting:** Enforces a hard limit of 2 requests per second using Go's background worker and precise `time.Sleep`.
+* **Configurable TPS Rate Limiting:** Enforces the request rate using the `TPS` environment variable (default: `2`) with Go's background worker and precise `time.Sleep`.
 * **Persistent Queue:** Uses SQLite (`modernc.org/sqlite` - pure Go, no CGO required) to store the queue. Prevents data loss during unexpected container restarts or crashes.
 * **Database Optimization (Row Recycling):** Reuses rows where `is_sent = 1` instead of inserting new ones indefinitely. This Object Pooling concept guarantees the `.db` file size will not bloat over time.
 * **Smart Retry Mechanism:**
@@ -36,6 +36,7 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 2. Update your `.env` or `docker-compose.yml` values before starting the container:
 * `NOTIPUSH_URL`: Downstream API endpoint (Current default: `https://notipush.app/api/send-push`)
 * `NOTIPUSH_PORT`: Port exposed by the microservice. The example `.env` in this repository uses `8280`
+* `TPS`: Request rate limit for outbound delivery. The service reads this from `.env` or the process environment, falls back to `2` if unset or invalid, and the example `.env` in this repository uses `10`
 * `INBOUND_BEARER_TOKEN`: Bearer token for inbound requests to `POST /send-push`. Use a long random secret when the caller has a dynamic IP
 * `ALLOWED_IPS`: Comma-separated allowlist for fallback access when the caller does not send a bearer token. Supports single IPs, hostnames, IPv6, and CIDR blocks
 * `NOTIPUSH_TOKEN`: Optional outbound `Authorization` header sent from this microservice to the downstream NotiPush API
@@ -52,6 +53,9 @@ A lightweight, high-performance microservice written in Go (Golang). It acts as 
 docker compose up -d --build
 
 ```
+
+
+The Compose setup mounts `.env` into the container so runtime settings like `TPS` are read from the same file you edit locally.
 
 
 *(Note: The SQLite database file will be safely persisted in the `./push_data` folder on your host machine).*
@@ -91,7 +95,7 @@ curl -X POST http://localhost:8280/send-push \
     "token": "YOUR_NOTIPUSH_API_TOKEN",
     "device_token": "your_device_token_here",
     "title": "Hello World",
-    "body": "This message is rate-limited to 2 TPS"
+    "body": "This message uses the configured TPS limit"
 }'
 
 ```
@@ -119,11 +123,11 @@ GitHub Actions is configured in `.github/workflows/ci.yml` to run on every push 
 
 # 🇹🇭 Thai Version
 
-ไมโครเซอร์วิสขนาดเล็กและทำงานได้รวดเร็ว เขียนด้วยภาษา Go (Golang) ทำหน้าที่เป็นคิวตัวกลาง (Relay Queue) เพื่อส่ง Push Notification ไปยัง NotiPush API (หรือประยุกต์ใช้กับ API อื่นๆ ได้) โดยมีการควบคุมอัตราการส่งที่ **2 TPS (Transactions Per Second)** อย่างเด็ดขาด
+ไมโครเซอร์วิสขนาดเล็กและทำงานได้รวดเร็ว เขียนด้วยภาษา Go (Golang) ทำหน้าที่เป็นคิวตัวกลาง (Relay Queue) เพื่อส่ง Push Notification ไปยัง NotiPush API (หรือประยุกต์ใช้กับ API อื่นๆ ได้) โดยมีการควบคุมอัตราการส่งแบบกำหนดค่าได้ผ่าน `TPS` จาก `.env` หรือ process environment (ค่าเริ่มต้น `2`)
 
 ## 📌 คุณสมบัติทางวิศวกรรมของระบบ
 
-* **คุม 2 TPS เด็ดขาด:** ควบคุมอัตราการส่งไม่ให้เกิน 2 ครั้งต่อวินาทีโดยใช้ Worker และการหน่วงเวลาของ Go
+* **คุม TPS ได้จาก Environment:** ควบคุมอัตราการส่งตามค่า `TPS` (ค่าเริ่มต้น `2`) โดยใช้ Worker และการหน่วงเวลาของ Go
 * **คิวไม่สูญหายเมื่อไฟดับ:** ใช้ SQLite (`modernc.org/sqlite` - แบบ Pure Go ไม่ต้องพึ่งพา CGO) บันทึกคิวลงดิสก์ ข้อมูลที่รอส่งจะไม่หายไปแม้ Docker Container จะถูกลบหรือรีสตาร์ท
 * **ฐานข้อมูลไม่บวม (Row Recycling):** ใช้หลักการ Object Pooling โดยนำแถวข้อมูลที่ส่งสำเร็จแล้ว (`is_sent = 1`) กลับมาเขียนทับใหม่แทนการเพิ่มแถวใหม่ไปเรื่อยๆ ทำให้ขนาดไฟล์ `.db` คงที่และไม่กินพื้นที่ดิสก์
 * **ระบบ Retry อัจฉริยะแบบแยกประเภท:**
@@ -153,6 +157,7 @@ GitHub Actions is configured in `.github/workflows/ci.yml` to run on every push 
 2. แก้ค่าที่ `.env` หรือ `docker-compose.yml` ให้ตรงกับระบบจริงก่อนรัน
 * `NOTIPUSH_URL`: URL ของ API ปลายทาง (ค่าปัจจุบัน: `https://notipush.app/api/send-push`)
 * `NOTIPUSH_PORT`: Port ที่ต้องการให้ Microservice รัน โดยตัวอย่าง `.env` ใน repo นี้ใช้ `8280`
+* `TPS`: อัตราการยิง request ขาออกต่อวินาที ระบบจะอ่านจาก `.env` หรือ process environment โดยตัวอย่าง `.env` ใน repo นี้ใช้ `10` และจะ fallback เป็น `2` หากค่าไม่ถูกต้องหรือไม่ได้ตั้ง
 * `INBOUND_BEARER_TOKEN`: Bearer token สำหรับ request ที่ยิงเข้า `POST /send-push` แนะนำให้ตั้งเป็นค่ายาวและสุ่มเมื่อ client ใช้ Dynamic IP
 * `ALLOWED_IPS`: รายการ IP/Hostname/Subnet ที่อนุญาตให้ส่ง Push คั่นด้วย comma รองรับ CIDR notation และยังใช้เป็น fallback ได้
 * `NOTIPUSH_TOKEN`: (Optional) Token สำหรับขาออก ถ้า API ปลายทางบังคับให้ใส่ `Authorization` header
@@ -168,6 +173,9 @@ GitHub Actions is configured in `.github/workflows/ci.yml` to run on every push 
 docker compose up -d --build
 
 ```
+
+
+Compose ใน repo นี้จะ mount ไฟล์ `.env` เข้าไปใน container ด้วย เพื่อให้ runtime settings อย่าง `TPS` อ่านจากไฟล์เดียวกับที่แก้ในเครื่องได้ตรง ๆ
 
 
 *(หมายเหตุ: ไฟล์ฐานข้อมูล SQLite จะถูกบันทึกไว้อย่างปลอดภัยที่โฟลเดอร์ `./push_data` ในเครื่องโฮสต์)*

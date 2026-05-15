@@ -10,10 +10,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver (No CGO required)
 )
 
@@ -28,9 +30,36 @@ var (
 	listenPort         string
 	allowedIPs         []string
 	debugMode          bool
+	workerTPS          int
+	workerDelay        time.Duration
 )
 
+const defaultTPS = 2
+
+func loadTPSConfig() (int, time.Duration) {
+	tpsStr := strings.TrimSpace(os.Getenv("TPS"))
+	if tpsStr == "" {
+		return defaultTPS, time.Second / time.Duration(defaultTPS)
+	}
+
+	tps, err := strconv.Atoi(tpsStr)
+	if err != nil || tps <= 0 {
+		log.Printf("[WARNING] Invalid TPS=%q, falling back to %d TPS", tpsStr, defaultTPS)
+		return defaultTPS, time.Second / time.Duration(defaultTPS)
+	}
+
+	return tps, time.Second / time.Duration(tps)
+}
+
+func loadDotEnv() {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Printf("[WARNING] Failed to load .env: %v", err)
+	}
+}
+
 func main() {
+	loadDotEnv()
+
 	// ดึงค่า URL ปลายทางจาก Environment Variable (ถ้าไม่มีใช้ค่า Default)
 	targetURL = os.Getenv("NOTIPUSH_URL")
 	if targetURL == "" {
@@ -60,11 +89,14 @@ func main() {
 	}
 
 	debugMode = strings.EqualFold(os.Getenv("DEBUG"), "true")
+	workerTPS, workerDelay = loadTPSConfig()
 
 	initDB()
 	defer db.Close()
 
-	// รัน Worker 1 ตัวเพื่อคุม 2 TPS เด็ดขาด
+	log.Printf("Worker rate limit configured at %d TPS", workerTPS)
+
+	// รัน Worker 1 ตัวเพื่อคุม TPS ตามค่าจาก environment
 	go queueWorker()
 
 	http.HandleFunc("/send-push", enqueuePushHandler)
@@ -363,8 +395,8 @@ func queueWorker() {
 			}
 		}
 
-		// คุม TPS: 2 TPS = 1 งานใช้เวลาหน่วง 0.5 วินาที
-		time.Sleep(500 * time.Millisecond)
+		// คุม TPS ตามค่าที่ตั้งไว้จาก environment
+		time.Sleep(workerDelay)
 	}
 }
 
